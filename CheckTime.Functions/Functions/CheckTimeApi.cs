@@ -18,7 +18,7 @@ namespace CheckTime.Functions.Functions
     {
         [FunctionName(nameof(RegisterTime))]
         public static async Task<IActionResult> RegisterTime(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "CheckTime")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/checktime")] HttpRequest req,
             [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
             ILogger log)
         {
@@ -53,6 +53,73 @@ namespace CheckTime.Functions.Functions
                 RowKey = Guid.NewGuid().ToString(),
                 ETag = "*"
             };
+
+            TableOperation addOperation = TableOperation.Insert(checkEntity);
+            await checkStructureTable.ExecuteAsync(addOperation);
+
+            log.LogInformation("New register in table CHECKTIME");
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                IdClient = checkEntity.IdClient,
+                RegisteredTime = checkEntity.RegisterTime,
+                Message = "New register succefull."
+            });
+        }
+
+
+        [FunctionName(nameof(UpdateRegisterTime))]
+        public static async Task<IActionResult> UpdateRegisterTime(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "v1/checktime/{IdClient}")] HttpRequest req,
+            [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
+            int IdClient,
+            ILogger log)
+        {
+            log.LogInformation($"Prepare an update for IdClient: {IdClient} for CheckTime Table");
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            CheckStructure checkStructure = JsonConvert.DeserializeObject<CheckStructure>(requestBody);
+
+            //Validate IdClient in CheckTime table.
+            TableOperation findOperation = TableOperation.Retrieve<CheckEntity>("CHECKTIME", IdClient.ToString());
+            TableResult findIdClientResult = await checkStructureTable.ExecuteAsync(findOperation);
+
+            if (findIdClientResult.Result == null)
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = $"The user with id:{checkStructure.IdClient} not found in CheckTime table."
+                });
+            }
+
+            //Validate registeredTime
+            CheckEntity checkEntity = (CheckEntity)findIdClientResult.Result;
+
+            if (string.IsNullOrEmpty(checkStructure.RegisterTime.ToString()))
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = "The request must have registeredTime AAAA-MM-DD:HH:MM:SS"
+                });
+            }
+
+            //Validate type
+            if (string.IsNullOrEmpty(checkStructure.Type.ToString()))
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = "The request must have registeredTime AAAA-MM-DD:HH:MM:SS"
+                });
+            }
+
+
+
+
+
+
+
+
+
 
             TableOperation addOperation = TableOperation.Insert(checkEntity);
             await checkStructureTable.ExecuteAsync(addOperation);
