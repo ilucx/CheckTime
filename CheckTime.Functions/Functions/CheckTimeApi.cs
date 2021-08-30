@@ -72,7 +72,7 @@ namespace CheckTime.Functions.Functions
         public static async Task<IActionResult> UpdateRegisterTime(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "v1/checktime/{IdClient}")] HttpRequest req,
             [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
-            int IdClient,
+            string IdClient,
             ILogger log)
         {
             log.LogInformation($"Prepare an update for IdClient: {IdClient} for CheckTime Table");
@@ -81,7 +81,7 @@ namespace CheckTime.Functions.Functions
             CheckStructure checkStructure = JsonConvert.DeserializeObject<CheckStructure>(requestBody);
 
             //Validate IdClient in CheckTime table.
-            TableOperation findOperation = TableOperation.Retrieve<CheckEntity>("CHECKTIME", IdClient.ToString());
+            TableOperation findOperation = TableOperation.Retrieve<CheckEntity>("CHECKTIME", IdClient);
             TableResult findIdClientResult = await checkStructureTable.ExecuteAsync(findOperation);
 
             if (findIdClientResult.Result == null)
@@ -94,12 +94,14 @@ namespace CheckTime.Functions.Functions
 
             //Validate registeredTime
             CheckEntity checkEntity = (CheckEntity)findIdClientResult.Result;
+            checkEntity.RegisterTime = checkStructure.RegisterTime;
+            checkEntity.Type = checkStructure.Type;
 
             if (string.IsNullOrEmpty(checkStructure.RegisterTime.ToString()))
             {
                 return new BadRequestObjectResult(new ResponseCheckTime
                 {
-                    Message = "The request must have registeredTime AAAA-MM-DD:HH:MM:SS"
+                    Message = "The request must have registeredTime YYYY-MM-DD HH:MM:SS"
                 });
             }
 
@@ -108,29 +110,19 @@ namespace CheckTime.Functions.Functions
             {
                 return new BadRequestObjectResult(new ResponseCheckTime
                 {
-                    Message = "The request must have registeredTime AAAA-MM-DD:HH:MM:SS"
+                    Message = "The request must have type"
                 });
             }
 
+            TableOperation replaceOperation = TableOperation.Replace(checkEntity);
+            await checkStructureTable.ExecuteAsync(replaceOperation);
 
+            log.LogInformation($"Update the register {IdClient} in table.");
 
-
-
-
-
-
-
-
-            TableOperation addOperation = TableOperation.Insert(checkEntity);
-            await checkStructureTable.ExecuteAsync(addOperation);
-
-            log.LogInformation("New register in table CHECKTIME");
-
-            return new OkObjectResult(new ResponseCheckTime
+            return new OkObjectResult( new ResponseCheckTime 
             {
                 IdClient = checkEntity.IdClient,
-                RegisteredTime = checkEntity.RegisterTime,
-                Message = "New register succefull."
+                Message = "The register was ejecuted sucessfull"
             });
         }
     }
