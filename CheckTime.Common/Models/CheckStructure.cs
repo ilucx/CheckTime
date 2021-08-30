@@ -4,7 +4,7 @@ using System.Text;
 
 namespace CheckTime.Common.Models
 {
-    class CheckStructure
+    public class CheckStructure
     {
         public int IdClient { get; set; }
         public DateTime RegisterTime { get; set; }
