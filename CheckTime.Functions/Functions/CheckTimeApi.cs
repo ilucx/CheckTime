@@ -67,7 +67,6 @@ namespace CheckTime.Functions.Functions
             });
         }
 
-
         [FunctionName(nameof(UpdateRegisterTime))]
         public static async Task<IActionResult> UpdateRegisterTime(
             [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "v1/checktime/{IdClient}")] HttpRequest req,
@@ -162,7 +161,7 @@ namespace CheckTime.Functions.Functions
             {
                 return new BadRequestObjectResult(new ResponseCheckTime
                 {
-                    Message ="Id:${id} is not fount in Checktime table."
+                    Message =$"Id:{id} is not fount in Checktime table."
                 });
             }
 
@@ -171,6 +170,34 @@ namespace CheckTime.Functions.Functions
             return new OkObjectResult(new ResponseCheckTime
             {
                 Message = $"Retrieved all register to checktime table by id:{id}.",
+                Results = checkEntity
+            });
+        }
+
+        [FunctionName(nameof(DeleteRegisterById))]
+        public static async Task<IActionResult> DeleteRegisterById(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "v1/checktime/{id}")] HttpRequest req,
+            [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
+            [Table("CheckStructure", "CHECKTIME", "{id}", Connection = "AzureWebJobsStorage")] CheckEntity checkEntity,
+            string id,
+            ILogger log)
+        {
+            log.LogInformation($"Prepare to delete register by id: {id}");
+
+            if (checkEntity == null)
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = $"Id:{id} is not fount in Checktime table."
+                });
+            }
+            await checkStructureTable.ExecuteAsync(TableOperation.Delete(checkEntity));
+
+            log.LogInformation($"Delete register by id: {id}");
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                Message = "The register was deleted successfully",
                 Results = checkEntity
             });
         }
