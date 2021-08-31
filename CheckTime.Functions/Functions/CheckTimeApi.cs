@@ -148,6 +148,32 @@ namespace CheckTime.Functions.Functions
                 Results = allRegisters
             });
         }
+
+        [FunctionName(nameof(GetRegisterById))]
+        public static  IActionResult GetRegisterById(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/checktime/{id}")] HttpRequest req,
+            [Table("CheckStructure","CHECKTIME","{id}", Connection = "AzureWebJobsStorage")] CheckEntity checkEntity,
+            string id,
+            ILogger log)
+        {
+            log.LogInformation($"Prepare to get all register by id: {id}");
+
+            if (checkEntity==null)
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message ="Id:${id} is not fount in Checktime table."
+                });
+            }
+
+            log.LogInformation($"Returning register by id: {id}");
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                Message = $"Retrieved all register to checktime table by id:{id}.",
+                Results = checkEntity
+            });
+        }
     }
     
 }
