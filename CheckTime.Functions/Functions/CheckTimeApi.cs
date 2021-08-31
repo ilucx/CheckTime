@@ -125,5 +125,29 @@ namespace CheckTime.Functions.Functions
                 Message = "The register was ejecuted sucessfull"
             });
         }
+
+        [FunctionName(nameof(GetAllRegisters))]
+        public static async Task<IActionResult> GetAllRegisters(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/checktime")] HttpRequest req,
+            [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
+            ILogger log)
+        {
+            log.LogInformation("Prepare to get all registers.");
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            CheckStructure checkStructure = JsonConvert.DeserializeObject<CheckStructure>(requestBody);
+
+            TableQuery<CheckEntity> query = new TableQuery<CheckEntity>();
+            TableQuerySegment<CheckEntity> allRegisters = await checkStructureTable.ExecuteQuerySegmentedAsync(query, null);
+
+            log.LogInformation("All registers ready to return.");
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                Message = "Retrieved all register to checktime table.",
+                Results = allRegisters
+            });
+        }
     }
+    
 }
