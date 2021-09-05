@@ -24,7 +24,7 @@ namespace CheckTime.Functions.Functions
             /*//CheckConsolidateEntity = Tabla 2
             TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>();
             TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);*/
-
+            /*
             bool correctUpdate = false;
 
             log.LogInformation($"Entrando al primer foreach");
@@ -77,7 +77,7 @@ namespace CheckTime.Functions.Functions
                         }
                     }
                 }
-            }
+            }*/
         }
     }
 }

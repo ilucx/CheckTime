@@ -8,6 +8,6 @@ namespace CheckTime.Common.Models
     {
         public int IdClient { get; set; }
         public DateTime DateClient { get; set; }
-        public  float MinWorked { get; set; }
+        public  double MinWorked { get; set; }
     }
 }
