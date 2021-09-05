@@ -5,12 +5,10 @@ using System.Text;
 
 namespace CheckTime.Functions.Entities
 {
-    public class CheckEntity : TableEntity
+    public class CheckConsolidateEntity : TableEntity
     {
         public int IdClient { get; set; }
-        public DateTime RegisterTime { get; set; }
-        public int Type { get; set; }
-        public bool Consolidated { get; set; }
+        public DateTime DateClient { get; set; }
+        public double MinWorked { get; set; }
     }
-
 }

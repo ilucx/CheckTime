@@ -9,7 +9,6 @@ namespace CheckTime.Common.Responses
         public int IdClient { get; set; }
         public DateTime RegisteredTime { get; set; }
         public string Message { get; set; }
-
         public object Results { get; set; }
     }
 }

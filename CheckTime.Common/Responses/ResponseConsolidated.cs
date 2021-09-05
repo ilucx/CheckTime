@@ -4,10 +4,11 @@ using System.Text;
 
 namespace CheckTime.Common.Responses
 {
-    class ResponseConsolidated
+    public class ResponseConsolidated
     {
         public bool Completed { get; set; }
         public string Message { get; set; }
+
+        public object Result { get; set; }
     }
 }
-// Se guarda en el log

@@ -1,16 +1,16 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Microsoft.WindowsAzure.Storage.Table;
 using CheckTime.Common.Models;
 using CheckTime.Common.Responses;
 using CheckTime.Functions.Entities;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.WebJobs;
+using Microsoft.Azure.WebJobs.Extensions.Http;
+using Microsoft.Extensions.Logging;
+using Microsoft.WindowsAzure.Storage.Table;
+using Newtonsoft.Json;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace CheckTime.Functions.Functions
 {
@@ -118,7 +118,7 @@ namespace CheckTime.Functions.Functions
 
             log.LogInformation($"Update the register {IdClient} in table.");
 
-            return new OkObjectResult( new ResponseCheckTime 
+            return new OkObjectResult(new ResponseCheckTime
             {
                 IdClient = checkEntity.IdClient,
                 Message = "The register was ejecuted sucessfull"
@@ -149,19 +149,19 @@ namespace CheckTime.Functions.Functions
         }
 
         [FunctionName(nameof(GetRegisterById))]
-        public static  IActionResult GetRegisterById(
+        public static IActionResult GetRegisterById(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/checktime/{id}")] HttpRequest req,
-            [Table("CheckStructure","CHECKTIME","{id}", Connection = "AzureWebJobsStorage")] CheckEntity checkEntity,
+            [Table("CheckStructure", "CHECKTIME", "{id}", Connection = "AzureWebJobsStorage")] CheckEntity checkEntity,
             string id,
             ILogger log)
         {
             log.LogInformation($"Prepare to get all register by id: {id}");
 
-            if (checkEntity==null)
+            if (checkEntity == null)
             {
                 return new BadRequestObjectResult(new ResponseCheckTime
                 {
-                    Message =$"Id:{id} is not fount in Checktime table."
+                    Message = $"Id:{id} is not fount in Checktime table."
                 });
             }
 
@@ -201,6 +201,235 @@ namespace CheckTime.Functions.Functions
                 Results = checkEntity
             });
         }
+
+        [FunctionName(nameof(TempTime))]
+        public static async Task<IActionResult> TempTime(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/checktime/consolidate")] HttpRequest req,
+            [Table("CheckConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
+            ILogger log)
+        {
+            log.LogInformation("Recieved a new register");
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            CheckStructureConsolidate checkStructureConsolidate = JsonConvert.DeserializeObject<CheckStructureConsolidate>(requestBody);
+
+            if (string.IsNullOrEmpty(checkStructureConsolidate?.IdClient.ToString()))
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = "The request must have a IdClient."
+                });
+            }
+
+            CheckConsolidateEntity checkConsolidateEntity = new CheckConsolidateEntity
+            {
+                IdClient = checkStructureConsolidate.IdClient,
+                DateClient = checkStructureConsolidate.DateClient,
+                MinWorked = checkStructureConsolidate.MinWorked,
+                PartitionKey = "CHECKTIMECONSOLIDATE",
+                RowKey = Guid.NewGuid().ToString(),
+                ETag = "*"
+            };
+
+            TableOperation addOperation = TableOperation.Insert(checkConsolidateEntity);
+            await checkStructureTable.ExecuteAsync(addOperation);
+
+            log.LogInformation("New register in table CHECKTIME");
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                IdClient = checkConsolidateEntity.IdClient,
+                Message = "New register succefull."
+            });
+        }
+
+        [FunctionName(nameof(Test))]
+        public static async Task<IActionResult> Test(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/checktimetest")] HttpRequest req,
+            [Table("CheckConsolidate", Connection = "AzureWebJobsStorage")]
+            CloudTable checkStructureTable,
+            ILogger log)
+        {
+            log.LogInformation($"Prepare to consolidate all registers. Time: {DateTime.Now}");
+
+            // CheckEntity = Tabla 1
+            string filter = TableQuery.GenerateFilterConditionForBool("Consolidated", QueryComparisons.Equal, false);
+            TableQuery<CheckEntity> query = new TableQuery<CheckEntity>().Where(filter);
+            TableQuerySegment<CheckEntity> allCheckEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(query, null);
+
+
+            //CheckConsolidateEntity = Tabla 2
+            TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>();
+            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);
+
+            if (allCheckEntity == null)
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = "Object null"
+                });
+            }
+
+            log.LogInformation("Entrando al primer foreach");
+
+            foreach (CheckEntity item in allCheckEntity) //1
+            {
+                log.LogInformation("Entrando al segundo foreach");
+                foreach (CheckEntity itemTwo in allCheckEntity) //todos
+                {
+                    log.LogInformation("Validando");
+                    if (item.IdClient == itemTwo.IdClient && item.Type == 1 && itemTwo.Type == 0)
+                    {
+                        TimeSpan dateCalculated = (itemTwo.RegisterTime - item.RegisterTime);
+
+                        CheckEntity check = new CheckEntity
+                        {
+                            IdClient = item.IdClient,
+                            RegisterTime = item.RegisterTime,
+                            Type = item.Type,
+                            Consolidated = true,
+                            PartitionKey = item.PartitionKey,
+                            RowKey = item.RowKey,
+                            ETag = item.ETag
+                        };
+
+                        TableOperation updateCheckEntity = TableOperation.Replace(check);
+                        await checkStructureTable.ExecuteAsync(updateCheckEntity);
+
+                        log.LogInformation("Actualizando primera tabla");
+                        foreach (CheckConsolidateEntity itemConsolidate in allCheckConsolidateEntity)
+                        {
+                            log.LogInformation("Actualizando consolidado segunda tabla");
+                            if (itemConsolidate.IdClient == item.IdClient)
+                            {
+                                CheckConsolidateEntity checkConsolidate = new CheckConsolidateEntity
+                                {
+                                    IdClient = itemConsolidate.IdClient,
+                                    DateClient = itemConsolidate.DateClient,
+                                    MinWorked = itemConsolidate.MinWorked + dateCalculated.TotalMinutes
+                                };
+
+                                TableOperation insertCheckConsolidate = TableOperation.Replace(checkConsolidate);
+                                await checkStructureTable.ExecuteAsync(insertCheckConsolidate);
+                            }
+                            else
+                            {
+                                CheckConsolidateEntity checkConsolidate = new CheckConsolidateEntity
+                                {
+                                    IdClient = item.IdClient,
+                                    DateClient = item.RegisterTime,
+                                    MinWorked = dateCalculated.TotalMinutes
+                                };
+
+                                TableOperation insertCheckConsolidate = TableOperation.Insert(checkConsolidate);
+                                await checkStructureTable.ExecuteAsync(insertCheckConsolidate);
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                Message = "Table",
+                Results = allCheckEntity
+            });
+        }
+
+        [FunctionName(nameof(Consolidate))]
+        public static async Task<IActionResult> Consolidate(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/consolidate")] HttpRequest req,
+            [Table("CheckConsolidate", Connection = "AzureWebJobsStorage")]
+            CloudTable checkStructureTable,
+            ILogger log)
+        {
+            log.LogInformation($"Prepare to consolidate all registers. Time: {DateTime.Now} CONSOLIDATE");
+
+            // CheckEntity = Tabla 1
+            string filter = TableQuery.GenerateFilterConditionForBool("Consolidated", QueryComparisons.Equal, false);
+            TableQuery<CheckEntity> query = new TableQuery<CheckEntity>().Where(filter);
+            TableQuerySegment<CheckEntity> allCheckEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(query, null);
+
+
+            //CheckConsolidateEntity = Tabla 2
+            TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>();
+            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);
+
+            if (allCheckEntity == null)
+            {
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = "Object null"
+                });
+            }
+
+            log.LogInformation("Entrando al primer foreach CONSOLIDATE");
+
+            foreach (CheckEntity item in allCheckEntity) //1
+            {
+                log.LogInformation("Entrando al segundo foreach CONSOLIDATE");
+                foreach (CheckEntity itemTwo in allCheckEntity) //todos
+                {
+                    log.LogInformation("Validando CONSOLIDATE");
+                    if (item.IdClient == itemTwo.IdClient && item.Type == 1 && itemTwo.Type == 0)
+                    {
+                        TimeSpan dateCalculated = (itemTwo.RegisterTime - item.RegisterTime);
+
+                        CheckEntity check = new CheckEntity
+                        {
+                            IdClient = item.IdClient,
+                            RegisterTime = item.RegisterTime,
+                            Type = item.Type,
+                            Consolidated = true,
+                            PartitionKey = item.PartitionKey,
+                            RowKey = item.RowKey,
+                            ETag = "*"
+                        };
+
+                        TableOperation updateCheckEntity = TableOperation.Replace(check);
+                        await checkStructureTable.ExecuteAsync(updateCheckEntity);
+
+                        log.LogInformation("Actualizando primera tabla");
+                        foreach (CheckConsolidateEntity itemConsolidate in allCheckConsolidateEntity)
+                        {
+                            log.LogInformation("Actualizando consolidado segunda tabla");
+                            if (itemConsolidate.IdClient == item.IdClient)
+                            {
+                                CheckConsolidateEntity checkConsolidate = new CheckConsolidateEntity
+                                {
+                                    IdClient = itemConsolidate.IdClient,
+                                    DateClient = itemConsolidate.DateClient,
+                                    MinWorked = itemConsolidate.MinWorked + dateCalculated.TotalMinutes
+                                };
+
+                                TableOperation insertCheckConsolidate = TableOperation.Replace(checkConsolidate);
+                                await checkStructureTable.ExecuteAsync(insertCheckConsolidate);
+                            }
+                            else
+                            {
+                                CheckConsolidateEntity checkConsolidate = new CheckConsolidateEntity
+                                {
+                                    IdClient = item.IdClient,
+                                    DateClient = item.RegisterTime,
+                                    MinWorked = dateCalculated.TotalMinutes
+                                };
+
+                                TableOperation insertCheckConsolidate = TableOperation.Insert(checkConsolidate);
+                                await checkStructureTable.ExecuteAsync(insertCheckConsolidate);
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            return new OkObjectResult(new ResponseCheckTime
+            {
+                Message = "Table",
+                Results = allCheckEntity
+            });
+        }
     }
-    
+
 }
