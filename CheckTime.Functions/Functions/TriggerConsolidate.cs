@@ -13,71 +13,102 @@ namespace CheckTime.Functions.Functions
         [FunctionName(nameof(TriggerConsolidateFunction))]
         public static async Task TriggerConsolidateFunction(
         [TimerTrigger("0 */2 * * * *")] TimerInfo myTimer,
-        [Table("CheckStructure", Connection = "AzureWebJobsStorage")]CloudTable checkStructureTable, 
+        [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
+        [Table("CheckStructureConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkConsolidateStructureTable,
         ILogger log)
         {
-            // CheckEntity = Tabla 1
+            log.LogInformation($"Prepare to consolidate all registers. Time: {DateTime.Now}");
+
+            // CheckEntity
             string filter = TableQuery.GenerateFilterConditionForBool("Consolidated", QueryComparisons.Equal, false);
             TableQuery<CheckEntity> query = new TableQuery<CheckEntity>().Where(filter);
             TableQuerySegment<CheckEntity> allCheckEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(query, null);
 
-            /*//CheckConsolidateEntity = Tabla 2
-            TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>();
-            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);*/
-            /*
-            bool correctUpdate = false;
-
-            log.LogInformation($"Entrando al primer foreach");
             foreach (CheckEntity item in allCheckEntity)
             {
-                log.LogInformation($"Este es el primer if");
                 if (!string.IsNullOrEmpty(item.IdClient.ToString()) && item.Type == 0)
                 {
-                    log.LogInformation($"Este es el segundo foreach");
                     foreach (CheckEntity itemtwo in allCheckEntity)
                     {
-                        TimeSpan dateCalculated = (itemtwo.RegisterTime - item.RegisterTime);
-                        log.LogInformation($"Este es el tercer foreach");
-                        if (itemtwo.IdClient.Equals(item.IdClient) && itemtwo.Type == 1)
+                        TimeSpan timeCalculated = (itemtwo.RegisterTime - item.RegisterTime);
+
+                        if (item.IdClient == itemtwo.IdClient && itemtwo.Type == 1)
                         {
-                            log.LogInformation($"Este es el IDRowKey, {item.RowKey}, {itemtwo.RowKey}");
+                            log.LogInformation("Prepare to update CheckTime Table");
 
                             CheckEntity check = new CheckEntity
                             {
                                 IdClient = itemtwo.IdClient,
-                                RegisterTime = Convert.ToDateTime(dateCalculated.ToString()),
+                                RegisterTime = itemtwo.RegisterTime,
                                 Type = itemtwo.Type,
                                 Consolidated = true,
-                                PartitionKey = "WORKINGTIME",
+                                PartitionKey = itemtwo.PartitionKey,
                                 RowKey = itemtwo.RowKey,
                                 ETag = "*"
                             };
 
-                            log.LogInformation($"Este es el cálculo, {dateCalculated}");
-                            TableOperation updateCheckEntity = TableOperation.Replace(check);
-                            await checkStructureTable.ExecuteAsync(updateCheckEntity);
-                            correctUpdate = true;
-                        }
-
-                        log.LogInformation($"He estado aquí, {item.RowKey}");
-                        if (correctUpdate == true)
-                        {
-                            CheckEntity check = new CheckEntity
+                            CheckEntity checkTwo = new CheckEntity
                             {
                                 IdClient = item.IdClient,
-                                RegisterTime = Convert.ToDateTime(dateCalculated.ToString()),
+                                RegisterTime = item.RegisterTime,
                                 Type = item.Type,
                                 Consolidated = true,
-                                PartitionKey = "WORKINGTIME",
+                                PartitionKey = item.PartitionKey,
                                 RowKey = item.RowKey,
                                 ETag = "*"
                             };
+
                             TableOperation updateCheckEntity = TableOperation.Replace(check);
                             await checkStructureTable.ExecuteAsync(updateCheckEntity);
+
+                            TableOperation updateCheckEntityTwo = TableOperation.Replace(checkTwo);
+                            await checkStructureTable.ExecuteAsync(updateCheckEntityTwo);
+
+                            log.LogInformation("Prepare to update Consolidate Table");
+
+                            //CheckConsolidateEntity
+                            string filterConsolidate = TableQuery.GenerateFilterConditionForInt("IdClient", QueryComparisons.Equal, item.IdClient);
+                            TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>().Where(filterConsolidate);
+                            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkConsolidateStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);
+
+                            if (allCheckConsolidateEntity == null || allCheckConsolidateEntity.Results.Count.Equals(0))
+                            {
+                                CheckConsolidateEntity checkConsolidateInsert = new CheckConsolidateEntity
+                                {
+                                    IdClient = item.IdClient,
+                                    DateClient = item.RegisterTime,
+                                    MinWorked = timeCalculated.TotalMinutes,
+                                    PartitionKey = "CHECKCONSOLIDATE",
+                                    RowKey = Guid.NewGuid().ToString(),
+                                    ETag = "*"
+                                };
+
+                                TableOperation insertCheckConsolidate = TableOperation.Insert(checkConsolidateInsert);
+                                await checkConsolidateStructureTable.ExecuteAsync(insertCheckConsolidate);
+                            }
+                            else
+                            {
+                                foreach (CheckConsolidateEntity itemConsolidate in allCheckConsolidateEntity)
+                                {
+                                    CheckConsolidateEntity checkConsolidateReplace = new CheckConsolidateEntity
+                                    {
+                                        IdClient = itemConsolidate.IdClient,
+                                        DateClient = itemConsolidate.DateClient,
+                                        MinWorked = (double)(itemConsolidate.MinWorked + timeCalculated.TotalMinutes),
+                                        PartitionKey = "CHECKCONSOLIDATE",
+                                        RowKey = itemConsolidate.RowKey,
+                                        ETag = "*"
+                                    };
+
+                                    TableOperation replaceCheckConsolidate = TableOperation.Replace(checkConsolidateReplace);
+                                    await checkConsolidateStructureTable.ExecuteAsync(replaceCheckConsolidate);
+                                }
+                            }
+
                         }
                     }
                 }
-            }*/
+            }
         }
     }
 }

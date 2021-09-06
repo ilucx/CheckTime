@@ -17,19 +17,15 @@ namespace CheckTime.Functions.Functions
         public static async Task<IActionResult> FunTest(
             [HttpTrigger(AuthorizationLevel.Function, "get", Route = "otra")] HttpRequest req,
             [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
-            [Table("CheckConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkConsolidateStructureTable,
+            [Table("CheckStructureConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkConsolidateStructureTable,
             ILogger log)
         {
             log.LogInformation($"Prepare to consolidate all registers. Time: {DateTime.Now}");
 
-            // CheckEntity = Tabla 1
+            // CheckEntity
             string filter = TableQuery.GenerateFilterConditionForBool("Consolidated", QueryComparisons.Equal, false);
             TableQuery<CheckEntity> query = new TableQuery<CheckEntity>().Where(filter);
             TableQuerySegment<CheckEntity> allCheckEntity = await checkStructureTable.ExecuteQuerySegmentedAsync(query, null);
-
-            //CheckConsolidateEntity = Tabla 2
-            TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>();
-            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkConsolidateStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);
 
             foreach (CheckEntity item in allCheckEntity)
             {
@@ -46,7 +42,7 @@ namespace CheckTime.Functions.Functions
                             CheckEntity check = new CheckEntity
                             {
                                 IdClient = itemtwo.IdClient,
-                                RegisterTime = itemtwo.RegisterTime, //Convert.ToDateTime(dateCalculated.ToString()),
+                                RegisterTime = itemtwo.RegisterTime,
                                 Type = itemtwo.Type,
                                 Consolidated = true,
                                 PartitionKey = itemtwo.PartitionKey,
@@ -73,53 +69,45 @@ namespace CheckTime.Functions.Functions
 
                             log.LogInformation("Prepare to update Consolidate Table");
 
-                            CheckConsolidateEntity checkConsolidate = new CheckConsolidateEntity
-                            {
-                                IdClient = item.IdClient,
-                                DateClient = item.RegisterTime,
-                                MinWorked = timeCalculated.TotalMinutes,
-                                PartitionKey = "CHECKCONSOLIDATE",
-                                RowKey = Guid.NewGuid().ToString(),
-                                ETag = "*"
-                            };
+                            //CheckConsolidateEntity
+                            string filterConsolidate = TableQuery.GenerateFilterConditionForInt("IdClient", QueryComparisons.Equal, item.IdClient);
+                            TableQuery<CheckConsolidateEntity> queryConsolidate = new TableQuery<CheckConsolidateEntity>().Where(filterConsolidate);
+                            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkConsolidateStructureTable.ExecuteQuerySegmentedAsync(queryConsolidate, null);
 
-                            TableOperation insertCheckConsolidate = TableOperation.Insert(checkConsolidate);
-                            await checkConsolidateStructureTable.ExecuteAsync(insertCheckConsolidate);
-
-                            foreach (CheckConsolidateEntity itemConsolidate in allCheckConsolidateEntity)
+                            if (allCheckConsolidateEntity == null || allCheckConsolidateEntity.Results.Count.Equals(0))
                             {
-                                log.LogInformation("Actualizando consolidado segunda tabla");
-                                if (itemConsolidate.IdClient == item.IdClient)
+                                CheckConsolidateEntity checkConsolidateInsert = new CheckConsolidateEntity
                                 {
-                                    CheckConsolidateEntity checkConsolidateFor = new CheckConsolidateEntity
+                                    IdClient = item.IdClient,
+                                    DateClient = item.RegisterTime,
+                                    MinWorked = timeCalculated.TotalMinutes,
+                                    PartitionKey = "CHECKCONSOLIDATE",
+                                    RowKey = Guid.NewGuid().ToString(),
+                                    ETag = "*"
+                                };
+
+                                TableOperation insertCheckConsolidate = TableOperation.Insert(checkConsolidateInsert);
+                                await checkConsolidateStructureTable.ExecuteAsync(insertCheckConsolidate);
+                            }
+                            else
+                            {
+                                foreach (CheckConsolidateEntity itemConsolidate in allCheckConsolidateEntity)
+                                {
+                                    CheckConsolidateEntity checkConsolidateReplace = new CheckConsolidateEntity
                                     {
                                         IdClient = itemConsolidate.IdClient,
                                         DateClient = itemConsolidate.DateClient,
-                                        MinWorked = itemConsolidate.MinWorked + timeCalculated.TotalMinutes,
-                                        PartitionKey = itemConsolidate.PartitionKey,
+                                        MinWorked = (double)(itemConsolidate.MinWorked + timeCalculated.TotalMinutes),
+                                        PartitionKey = "CHECKCONSOLIDATE",
                                         RowKey = itemConsolidate.RowKey,
                                         ETag = "*"
                                     };
 
-                                    TableOperation insertConsolidate = TableOperation.Replace(checkConsolidateFor);
-                                    await checkConsolidateStructureTable.ExecuteAsync(insertConsolidate);
-                                }
-                                else
-                                {
-                                    CheckConsolidateEntity checkConsolidateFor = new CheckConsolidateEntity
-                                    {
-                                        IdClient = item.IdClient,
-                                        DateClient = item.RegisterTime,
-                                        MinWorked = timeCalculated.TotalMinutes,
-                                        PartitionKey = "CHECKCONSOLIDATE",
-                                        RowKey = Guid.NewGuid().ToString(),
-                                        ETag = "*"
-                                    };
-
-                                    TableOperation insertConsolidate = TableOperation.Insert(checkConsolidateFor);
-                                    await checkConsolidateStructureTable.ExecuteAsync(insertConsolidate);
+                                    TableOperation replaceCheckConsolidate = TableOperation.Replace(checkConsolidateReplace);
+                                    await checkConsolidateStructureTable.ExecuteAsync(replaceCheckConsolidate);
                                 }
                             }
+
                         }
                     }
                 }

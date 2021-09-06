@@ -202,44 +202,23 @@ namespace CheckTime.Functions.Functions
             });
         }
 
-        [FunctionName(nameof(TempTime))]
-        public static async Task<IActionResult> TempTime(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/checktime/consolidate")] HttpRequest req,
-            [Table("CheckConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
+        [FunctionName(nameof(GetConsolidateByDate))]
+        public static async Task<IActionResult> GetConsolidateByDate(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/checktime/consolidate/{dataRequest}")] HttpRequest req,
+            [Table("CheckStructureConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkConsolidateStructureTable,
+            DateTime dataRequest,
             ILogger log)
         {
             log.LogInformation("Recieved a new register");
+            string filter = TableQuery.GenerateFilterConditionForBool("Consolidated", QueryComparisons.Equal, false);
+            TableQuery<CheckEntity> query = new TableQuery<CheckEntity>().Where(filter);
+            TableQuerySegment<CheckEntity> allCheckConsolidateEntity = await checkConsolidateStructureTable.ExecuteQuerySegmentedAsync(query, null);
 
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            CheckStructureConsolidate checkStructureConsolidate = JsonConvert.DeserializeObject<CheckStructureConsolidate>(requestBody);
 
-            if (string.IsNullOrEmpty(checkStructureConsolidate?.IdClient.ToString()))
+            return new OkObjectResult(new ResponseConsolidated
             {
-                return new BadRequestObjectResult(new ResponseCheckTime
-                {
-                    Message = "The request must have a IdClient."
-                });
-            }
-
-            CheckConsolidateEntity checkConsolidateEntity = new CheckConsolidateEntity
-            {
-                IdClient = checkStructureConsolidate.IdClient,
-                DateClient = checkStructureConsolidate.DateClient,
-                MinWorked = checkStructureConsolidate.MinWorked,
-                PartitionKey = "CHECKTIMECONSOLIDATE",
-                RowKey = Guid.NewGuid().ToString(),
-                ETag = "*"
-            };
-
-            TableOperation addOperation = TableOperation.Insert(checkConsolidateEntity);
-            await checkStructureTable.ExecuteAsync(addOperation);
-
-            log.LogInformation("New register in table CHECKTIME");
-
-            return new OkObjectResult(new ResponseCheckTime
-            {
-                IdClient = checkConsolidateEntity.IdClient,
-                Message = "New register succefull."
+                Message = "New register succefull.",
+                Result = allCheckConsolidateEntity
             });
         }
 
