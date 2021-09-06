@@ -8,7 +8,6 @@ namespace CheckTime.Common.Responses
     {
         public bool Completed { get; set; }
         public string Message { get; set; }
-
         public object Result { get; set; }
     }
 }

@@ -5,6 +5,9 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage.Table;
+using CheckTime.Common.Models;
+using CheckTime.Common.Responses;
+using CheckTime.Functions.Entities;
 
 namespace CheckTime.Functions.Functions
 {

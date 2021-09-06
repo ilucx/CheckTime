@@ -204,24 +204,40 @@ namespace CheckTime.Functions.Functions
 
         [FunctionName(nameof(GetConsolidateByDate))]
         public static async Task<IActionResult> GetConsolidateByDate(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/checktime/consolidate/{dataRequest}")] HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/checktime/consolidate/{dataRequest}")] HttpRequest req,
             [Table("CheckStructureConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkConsolidateStructureTable,
             DateTime dataRequest,
             ILogger log)
         {
-            log.LogInformation("Recieved a new register");
-            string filter = TableQuery.GenerateFilterConditionForBool("Consolidated", QueryComparisons.Equal, false);
-            TableQuery<CheckEntity> query = new TableQuery<CheckEntity>().Where(filter);
-            TableQuerySegment<CheckEntity> allCheckConsolidateEntity = await checkConsolidateStructureTable.ExecuteQuerySegmentedAsync(query, null);
 
-
-            return new OkObjectResult(new ResponseConsolidated
+            if (string.IsNullOrEmpty(dataRequest.ToString()))
             {
-                Message = "New register succefull.",
-                Result = allCheckConsolidateEntity
-            });
+                return new BadRequestObjectResult(new ResponseCheckTime
+                {
+                    Message = "Insert a date valid."
+                });
+            }
+
+            log.LogInformation("Recieved a new register");
+            string filter = TableQuery.GenerateFilterConditionForDate("DateClient", QueryComparisons.Equal, dataRequest);
+            TableQuery<CheckConsolidateEntity> query = new TableQuery<CheckConsolidateEntity>().Where(filter);
+            TableQuerySegment<CheckConsolidateEntity> allCheckConsolidateEntity = await checkConsolidateStructureTable.ExecuteQuerySegmentedAsync(query, null);
+
+            if (allCheckConsolidateEntity == null || allCheckConsolidateEntity.Results.Count.Equals(0))
+            {
+                return new OkObjectResult(new ResponseConsolidated
+                {
+                    Message = "Date not found.",
+                });
+            }
+            else
+            {
+                return new OkObjectResult(new ResponseConsolidated
+                {
+                    Message = $"Get all registers from consolidate. Date:{dataRequest}",
+                    Result = allCheckConsolidateEntity
+                });
+            }
         }
-
     }
-
 }

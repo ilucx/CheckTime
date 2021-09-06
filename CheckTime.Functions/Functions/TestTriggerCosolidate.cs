@@ -11,11 +11,11 @@ using System.Threading.Tasks;
 
 namespace CheckTime.Functions.Functions
 {
-    public static class TestFuncionFereach
+    public static class TestTriggerCosolidate
     {
-        [FunctionName(nameof(FunTest))]
-        public static async Task<IActionResult> FunTest(
-            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "otra")] HttpRequest req,
+        [FunctionName(nameof(TestTriggerConsolidateFunction))]
+        public static async Task<IActionResult> TestTriggerConsolidateFunction(
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "testtriggerconsolidate")] HttpRequest req,
             [Table("CheckStructure", Connection = "AzureWebJobsStorage")] CloudTable checkStructureTable,
             [Table("CheckStructureConsolidate", Connection = "AzureWebJobsStorage")] CloudTable checkConsolidateStructureTable,
             ILogger log)
