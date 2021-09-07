@@ -29,6 +29,19 @@ namespace CheckTime.Test.Helpers
             };
         }
 
+        public static CheckConsolidateEntity GetCheckConsolidateEntity()
+        {
+            return new CheckConsolidateEntity
+            {
+                ETag = "*",
+                PartitionKey = "CHECKCONSOLIDATE",
+                RowKey = Guid.NewGuid().ToString(),
+                IdClient = 1,
+                DateClient = DateTime.UtcNow,
+                MinWorked = 300
+            };
+        }
+
         //Update registers
         public static DefaultHttpRequest CreateHttpRequest(Guid IdClient, CheckStructure checkStructure)
         {
