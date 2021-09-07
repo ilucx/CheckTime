@@ -76,6 +76,8 @@ namespace CheckTime.Functions.Functions
 
                             if (allCheckConsolidateEntity == null || allCheckConsolidateEntity.Results.Count.Equals(0))
                             {
+                                string tem = item.RegisterTime.ToShortDateString();
+                                DateTime tempTwo = Convert.ToDateTime(tem);
                                 CheckConsolidateEntity checkConsolidateInsert = new CheckConsolidateEntity
                                 {
                                     IdClient = item.IdClient,
@@ -85,7 +87,6 @@ namespace CheckTime.Functions.Functions
                                     RowKey = Guid.NewGuid().ToString(),
                                     ETag = "*"
                                 };
-
                                 TableOperation insertCheckConsolidate = TableOperation.Insert(checkConsolidateInsert);
                                 await checkConsolidateStructureTable.ExecuteAsync(insertCheckConsolidate);
                             }
@@ -96,7 +97,7 @@ namespace CheckTime.Functions.Functions
                                     CheckConsolidateEntity checkConsolidateReplace = new CheckConsolidateEntity
                                     {
                                         IdClient = itemConsolidate.IdClient,
-                                        DateClient = itemConsolidate.DateClient,
+                                        DateClient = itemConsolidate.DateClient.Date,
                                         MinWorked = (double)(itemConsolidate.MinWorked + timeCalculated.TotalMinutes),
                                         PartitionKey = "CHECKCONSOLIDATE",
                                         RowKey = itemConsolidate.RowKey,
